@@ -1,0 +1,10 @@
+{
+  "models": {
+    "duck": "./res/Duck_2.glb",
+    "box": "./res/Box.glb",
+    "roller": "./res/Roller.glb"
+  },
+  "brushes": {
+    "default": "./res/brush.png"
+  }
+}
