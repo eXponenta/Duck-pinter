@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "@pixi/runner": "5.2.0",
-    "three": "0.112.1",
-    "three-pathfinding": "0.11.0"
+    "three": "0.112.1"
   },
   "devDependencies": {
     "@babel/core": "7.2.0",
