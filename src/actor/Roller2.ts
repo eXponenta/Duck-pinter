@@ -1,7 +1,7 @@
 import { Object3D, Mesh, Quaternion, Vector3, Geometry, BufferGeometry } from "three";
 
 import { App } from "./../app";
-import { ClosestTriangle, DeltaAngle } from "../math/Utils";
+import { ClosestTriangle, DeltaAngle, IFaceDataEntry } from "../math/Utils";
 
 const ANGLE_EPS = 0.0001;
 const TOP = new Vector3(0, 1, 0);
@@ -26,7 +26,7 @@ export class Roller2 {
 	target: Mesh;
 	geom: Geometry;
 
-	onSolved: (props: any) => void | undefined;
+	onSolved: (props: IFaceDataEntry) => void | undefined;
 
 	constructor(private app: App, public view: Object3D = undefined) {}
 
@@ -46,18 +46,18 @@ export class Roller2 {
 	}
 
 	solvePoint(from: Vector3) {
-		const face = ClosestTriangle(this.geom, from, false, Infinity);
+		const data: IFaceDataEntry = ClosestTriangle(this.geom, from, false, Infinity);
 
-		face.normal = face.face.normal;
+		data.normal = data.face.normal;
 
-		if (!face) {
+		if (!data) {
 			return undefined;
 		}
 
-		face.face.normal.transformDirection(this.target.matrixWorld);
+		data.face.normal.transformDirection(this.target.matrixWorld);
 
-		this.onSolved && this.onSolved(face);
-		return face;
+		this.onSolved && this.onSolved(data);
+		return data;
 	}
 
 	align(normal: Vector3, pos: Vector3) {

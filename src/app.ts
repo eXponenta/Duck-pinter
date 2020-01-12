@@ -3,7 +3,6 @@ import { Mesh, DirectionalLight, AmbientLight, Vector3, MeshLambertMaterial, Fro
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { Roller2 } from "./actor/Roller2";
 import { BaseApp } from "./BaseApp";
-import { Rope } from "./geom/Rope";
 import { PoolMachine } from "./math/PoolMachine";
 
 export class App extends BaseApp {

@@ -1,6 +1,7 @@
 import { Rope } from "../geom/Rope";
 import { Scene, Mesh, Vector3 } from "three";
 import { Roller2 } from "../actor/Roller2";
+import { IFaceDataEntry } from "./Utils";
 
 export interface IRopePoolEntry {
 	rope: Rope;
@@ -72,7 +73,7 @@ export class PoolMachine {
 		this.rollers.clear();
 	}
 
-	_updateRopeData(from: Roller2, data: { point: Vector3; normal: Vector3 }) {
+	_updateRopeData(from: Roller2, data: IFaceDataEntry) {
 		const rollerData = this.rollers.get(from);
 
 		if (!rollerData) {
