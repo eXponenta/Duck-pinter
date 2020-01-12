@@ -4,6 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { Roller2 } from "./actor/Roller2";
 import { BaseApp } from "./BaseApp";
 import { PoolMachine } from "./math/PoolMachine";
+import { CameraMachine } from "./actor/CameraMachine";
 
 export class App extends BaseApp {
 	lights = {
@@ -16,6 +17,7 @@ export class App extends BaseApp {
 	controlls: OrbitControls;
 	roller: Roller2;
 	pool: PoolMachine;
+	cameraMachine: CameraMachine;
 
 	constructor(appEl: HTMLElement) {
 		super(appEl);
@@ -27,9 +29,10 @@ export class App extends BaseApp {
 		this.scene.add(a, d);
 
 		this.roller = new Roller2(this);
-		this.controlls = new OrbitControls(this.camera, this.renderer.domElement);
-		this.controlls.target = this.roller.position;
+		//this.controlls = new OrbitControls(this.camera, this.renderer.domElement);
+		//this.controlls.target = this.roller.position;
 
+		this.cameraMachine = new CameraMachine(this.camera);
 		this.pool = new PoolMachine(this.scene, 10, 300);
 	}
 
@@ -39,11 +42,12 @@ export class App extends BaseApp {
 		//this.scene.add(this.roller.view);
 		this.pool.init(this.model);
 		this.pool.registerRoller(this.roller, 0x00ff00);
+		this.cameraMachine.target = this.roller.view;
 
 		this.bindInput();
 
-		this.runs.update.add(this.controlls);
 		this.runs.update.add(this.roller);
+		this.runs.update.add(this.cameraMachine);
 
 		super.postInit();
 	}
