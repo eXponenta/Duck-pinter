@@ -1,5 +1,9 @@
 import { Mesh, PlaneBufferGeometry, MeshPhongMaterial, Vector3, BufferAttribute, BufferGeometry } from "three";
 
+const TMP_T = new Vector3();
+const TMP_V1 = new Vector3();
+const TMP_V2 = new Vector3();
+
 class LinePoint {
 	constructor(public p: Vector3, public n: Vector3) {}
 
@@ -14,7 +18,7 @@ export class Rope extends Mesh {
 	private _lastUpdateIndex = 0;
 
 	public offset = 0.01;
-	public minDistance = 0.5;
+	public minDistance = 10;
 	public updateNormals = false;
 
 	constructor(private section: number = 100, private _width = 1, private _color = 0xff0000) {
@@ -55,8 +59,12 @@ export class Rope extends Mesh {
 		return this._color;
 	}
 
-	rebuild() {
-		if (!this._durty) return;
+	get last() {
+		return this.points[this.points.length - 1];
+	}
+
+	rebuild(force = false) {
+		if (!this._durty && !force) return;
 
 		if (this.points.length < 2) {
 			this._durty = false;
@@ -64,10 +72,13 @@ export class Rope extends Mesh {
 			return;
 		}
 
+		const g = this.geometry as BufferGeometry;
 		const p = this.points;
-		const attr: BufferAttribute = (this.geometry as BufferGeometry).getAttribute("position");
+		const poss = g.getAttribute("position") as BufferAttribute;
+		const normal = g.getAttribute("normal") as BufferAttribute;
 
-		const t = new Vector3();
+		const t = TMP_T;
+		const a1 = TMP_V1;
 		const o = this.offset;
 		const w = this.width * 0.5;
 		const from = this._lastUpdateIndex;
@@ -79,29 +90,27 @@ export class Rope extends Mesh {
 			if (n !== f) {
 				t.subVectors(n.p, f.p)
 					.normalize()
-					.cross(f.n);
+					.cross(f.n)
+					.multiplyScalar(-w);
 			}
 
-			attr.setXYZ(
-				i * 2 + 1,
-				f.p.x - w * t.x + o * f.n.x,
-				f.p.y - w * t.y + o * f.n.y,
-				f.p.z - w * t.z + o * f.n.z
-			);
-			attr.setXYZ(
-				i * 2 + 0,
-				f.p.x + w * t.x + o * f.n.x,
-				f.p.y + w * t.y + o * f.n.y,
-				f.p.z + w * t.z + o * f.n.z
-			);
+			a1.addVectors(f.p, t).addScaledVector(f.n, o);
+
+			poss.setXYZ(i * 2 + 1, a1.x, a1.y, a1.z);
+
+			a1.addScaledVector(t, -2);
+
+			poss.setXYZ(i * 2 + 0, a1.x, a1.y, a1.z);
 
 			//todo update vertex normal
+			normal.setXYZ(i * 2 + 0, f.n.x, f.n.y, f.n.z);
+			normal.setXYZ(i * 2 + 1, f.n.x, f.n.y, f.n.z);
 		}
 
-		if (this.updateNormals) this.geometry.computeVertexNormals();
+		g.setDrawRange(0, 6 * (p.length - 1) + 2);
 
-		(this.geometry as BufferGeometry).setDrawRange(0, 6 * (p.length - 1));
-		attr.needsUpdate = true;
+		poss.needsUpdate = true;
+		normal.needsUpdate = true;
 
 		this._durty = false;
 		this._lastUpdateIndex = this.points.length - 1;
@@ -122,16 +131,35 @@ export class Rope extends Mesh {
 
 	pushPoint(point: Vector3, normal: Vector3, update = false) {
 		if (this.points.length) {
-			const dist = point.distanceTo(this.points[this.points.length - 1].p);
-			if (this.minDistance > dist) return;
+			const last2 = this.points[this.points.length - 2];
+			const dist = point.distanceTo(last2.p);
+
+			if (this.minDistance > dist && update) {
+				this._updateLink(point, normal);
+				return;
+			}
 		}
 
-		this.points.push(new LinePoint(point.clone(), normal.clone()));
-		this._durty = true;
+		this.points.push(new LinePoint(point, normal));
+
+		// create link point, used for untiblick
+		if (this.points.length === 1) {
+			this.points.push(this.points[0].clone());
+		}
 
 		if (update) {
-			this.rebuild();
+			this.rebuild(true);
 		}
+	}
+
+	_updateLink(point: Vector3, normal: Vector3) {
+		this.last.n.copy(normal);
+		this.last.p.copy(point);
+
+		// we need shift for updateing lastes 2 points
+		this._lastUpdateIndex = Math.min(this._lastUpdateIndex, this.points.length - 2);
+
+		this.rebuild(true);
 	}
 
 	clean() {

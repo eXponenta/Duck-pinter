@@ -6,6 +6,9 @@ import { BaseApp } from "./BaseApp";
 import { PoolMachine } from "./math/PoolMachine";
 import { CameraMachine } from "./actor/CameraMachine";
 
+const ROPE_POOL_SIZE = 10;
+const ROPE_POOL_LEN = 300;
+
 export class App extends BaseApp {
 	lights = {
 		d: new DirectionalLight(0xffffff, 1),
@@ -33,7 +36,7 @@ export class App extends BaseApp {
 		//this.controlls.target = this.roller.position;
 
 		this.cameraMachine = new CameraMachine(this.camera);
-		this.pool = new PoolMachine(this.scene, 10, 300);
+		this.pool = new PoolMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN);
 	}
 
 	init() {}
