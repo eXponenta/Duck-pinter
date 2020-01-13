@@ -1,5 +1,5 @@
-import { Rope } from "../geom/Rope";
-import { Scene, Mesh, Vector3 } from "three";
+import { Rope, IIntersectionRegion } from "../geom/Rope";
+import { Scene, Mesh, Vector3, ArrowHelper } from "three";
 import { Roller2 } from "../actor/Roller2";
 import { IFaceDataEntry } from "./Utils";
 
@@ -46,14 +46,15 @@ export class PoolMachine {
 	registerRoller(roller: Roller2, color: number) {
 		if (!this.surface) throw new Error("U must init before roolers registering");
 
-		const rope = this._getFreeRope();
+		const registry = this._getFreeRope();
 
-		rope.used = true;
-		rope.rope.color = color;
+		registry.used = true;
+		registry.rope.color = color;
+		registry.rope.onIntersectionFound = this._onIntersection.bind(this);
 
 		this.rollers.set(roller, {
 			roller,
-			ropes: [rope],
+			ropes: [registry],
 			color
 		});
 
@@ -73,6 +74,11 @@ export class PoolMachine {
 		this.rollers.clear();
 	}
 
+	_onIntersection(region: IIntersectionRegion) {
+		const d = new ArrowHelper(region.point.n, region.point.p, 0.5, 0xff0000);
+		this.scene.add(d);
+	}
+
 	_updateRopeData(from: Roller2, data: IFaceDataEntry) {
 		const rollerData = this.rollers.get(from);
 
@@ -86,9 +92,12 @@ export class PoolMachine {
 
 		if (curRope.rope.closed) {
 			const nextRope = this._getFreeRope();
+
 			nextRope.used = true;
 			nextRope.rope.color = rollerData.color;
 			nextRope.rope.join(curRope.rope);
+			nextRope.rope.onIntersectionFound = this._onIntersection.bind(this);
+
 			rollerData.ropes.push(nextRope);
 		}
 	}
