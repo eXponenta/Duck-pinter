@@ -1,4 +1,4 @@
-import { Object3D, Mesh, Quaternion, Vector3, Geometry, BufferGeometry } from "three";
+import { Object3D, Mesh, Quaternion, Vector3, Vector2, Geometry, BufferGeometry } from "three";
 
 import { App } from "./../app";
 import { ClosestTriangle, DeltaAngle, IFaceDataEntry } from "../math/Utils";
@@ -87,13 +87,13 @@ export class Roller2 {
 		this.view.position.copy(this.position);
 	}
 
-	move(delta: Vector3) {
+	move(delta: Vector2) {
 		if (!this.lastNormal || !this.target) return;
 		if (delta.length() < 0.01) return;
 
 		this.targetYAngle += this.angularSpeed * Math.sign(delta.x) * 0.01; // * +(Math.abs(delta.z) > 0);
 
-		const aligned = TMP_V.set(0, 0, -delta.z * this.linearSpeed);
+		const aligned = TMP_V.set(0, 0, -delta.y * this.linearSpeed);
 		aligned.applyQuaternion(this.quaternion);
 		aligned.add(this.position);
 

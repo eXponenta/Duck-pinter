@@ -1,10 +1,10 @@
 import { Mesh, DirectionalLight, AmbientLight, Vector3, MeshLambertMaterial, FrontSide, Scene } from "three";
 
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { Roller2 } from "./actor/Roller2";
 import { BaseApp } from "./BaseApp";
 import { PoolMachine } from "./math/PoolMachine";
 import { CameraMachine } from "./actor/CameraMachine";
+import { UniversalInput } from "./math/Input";
 
 const ROPE_POOL_SIZE = 10;
 const ROPE_POOL_LEN = 300;
@@ -16,8 +16,8 @@ export class App extends BaseApp {
 	};
 
 	inputAxis: Vector3 = new Vector3();
+	input: UniversalInput = new UniversalInput();
 	model: Mesh;
-	controlls: OrbitControls;
 	roller: Roller2;
 	pool: PoolMachine;
 	cameraMachine: CameraMachine;
@@ -32,6 +32,9 @@ export class App extends BaseApp {
 		this.scene.add(a, d);
 
 		this.roller = new Roller2(this);
+		this.input.attach(this.renderer.domElement);
+		this.input.enable = false;
+
 		//this.controlls = new OrbitControls(this.camera, this.renderer.domElement);
 		//this.controlls.target = this.roller.position;
 
@@ -47,10 +50,11 @@ export class App extends BaseApp {
 		this.pool.registerRoller(this.roller, 0x00ff00);
 		this.cameraMachine.target = this.roller.view;
 
-		this.bindInput();
-
+		this.runs.update.add(this.input);
 		this.runs.update.add(this.roller);
 		this.runs.update.add(this.cameraMachine);
+
+		this.input.enable = true;
 
 		super.postInit();
 	}
@@ -89,39 +93,7 @@ export class App extends BaseApp {
 	update(delta) {
 		this.lights.d.position.copy(this.roller.position);
 
-		const t = this.inputAxis.clone().multiplyScalar(0.01);
+		const t = this.input.axis.clone().multiplyScalar(-0.01);
 		this.roller.move(t);
-	}
-
-	bindInput() {
-		this.inputAxis.set(0, 0, 0);
-		window.addEventListener("keydown", this._keyDown.bind(this));
-		window.addEventListener("keyup", this._keyUp.bind(this));
-	}
-
-	_keyUp(event) {
-		const c = event.which;
-
-		let x = c === 65 || c === 37;
-		let z = c === 87 || c === 38;
-
-		x += c === 68 || c === 39;
-		z += c === 83 || c === 40;
-
-		if (x !== 0) this.inputAxis.x = 0;
-		if (z !== 0) this.inputAxis.z = 0;
-	}
-
-	_keyDown(event) {
-		const c = event.which;
-
-		let x = c === 65 || c === 37;
-		let z = c === 87 || c === 38;
-
-		x -= c === 68 || c === 39;
-		z -= c === 83 || c === 40;
-
-		this.inputAxis.x = Math.max(-1, Math.min(1, x + this.inputAxis.x));
-		this.inputAxis.z = Math.max(-1, Math.min(1, z + this.inputAxis.z));
 	}
 }
