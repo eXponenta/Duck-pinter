@@ -1,5 +1,6 @@
 import RESOURCES from "./res.json";
 import { Runner } from "@pixi/runner";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import {
 	PerspectiveCamera,
 	WebGLRenderer,
@@ -9,7 +10,6 @@ import {
 	Scene,
 	Clock
 } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 
 export class BaseApp {
 	static instance: BaseApp;

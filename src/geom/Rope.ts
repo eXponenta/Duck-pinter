@@ -7,7 +7,8 @@ import {
 	BufferGeometry,
 	Line3,
 	Plane,
-	ArrowHelper
+	Material,
+	Color
 } from "three";
 
 const TMP_T = new Vector3();
@@ -50,13 +51,16 @@ export class Rope extends Mesh {
 	public selfIntersection: IIntersectionRegion[] = [];
 	public onIntersectionFound: (e: IIntersectionRegion) => void;
 
-	constructor(private section: number = 100, private _width = 1, private _color = 0xff0000) {
-		super(
-			new PlaneBufferGeometry(_width, section * _width, 1, section),
-			new MeshPhongMaterial({ color: _color, wireframe: false })
-		);
+	constructor(private section: number = 100, private _width = 1, private _color = 0xff0000, private _mat: Material) {
+		super(new PlaneBufferGeometry(_width, section * _width, 1, section), _mat);
 
-		this.rebuild();
+		const geom = this.geometry as BufferGeometry;
+		const colors = new Float32Array(geom.getAttribute("position").count * 3);
+
+		geom.setAttribute("color", new BufferAttribute(colors, 3, true));
+
+		this.rebuild(false);
+		this._rebuildColor();
 	}
 
 	get width() {
@@ -67,10 +71,7 @@ export class Rope extends Mesh {
 		if (v === this.width || v <= 0) return;
 
 		this._width = v;
-		this._durty = true;
-		this._lastUpdateIndex = 0;
-
-		this.rebuild();
+		this.rebuild(true);
 	}
 
 	get closed() {
@@ -81,7 +82,7 @@ export class Rope extends Mesh {
 		if (this._color === v) return;
 
 		this._color = v;
-		this.material.color.set(v);
+		this._rebuildColor();
 	}
 
 	get color() {
@@ -110,7 +111,7 @@ export class Rope extends Mesh {
 		const a1 = TMP_V1;
 		const o = this.offset;
 		const w = this.width * 0.5;
-		const from = this._lastUpdateIndex;
+		const from = force ? 0 : this._lastUpdateIndex;
 
 		for (let i = from; i < Math.min(p.length, this.section + 1); i += 1) {
 			const f = p[i];
@@ -182,7 +183,8 @@ export class Rope extends Mesh {
 		}
 
 		if (update) {
-			this.rebuild(true);
+			this._durty = true;
+			this.rebuild();
 		}
 	}
 
@@ -274,8 +276,20 @@ export class Rope extends Mesh {
 
 		//we need shift for updating latest 2 points
 		this._lastUpdateIndex = Math.min(this._lastUpdateIndex, this.points.length - 2);
+		this._durty = true;
 
-		this.rebuild(true);
+		this.rebuild();
+	}
+
+	_rebuildColor() {
+		const color = (this.geometry as BufferGeometry).getAttribute("color") as BufferAttribute;
+		const c = new Color(this._color);
+
+		for (let i = 0; i < color.count; i++) {
+			color.setXYZ(i, c.r, c.g, c.b);
+		}
+
+		color.needsUpdate = true;
 	}
 
 	clean() {
@@ -284,6 +298,6 @@ export class Rope extends Mesh {
 		this._lastUpdateIndex = 0;
 		this.onIntersectionFound = undefined;
 
-		this.rebuild();
+		this.rebuild(true);
 	}
 }

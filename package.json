@@ -1,19 +1,20 @@
 {
-  "name": "vanilla",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.html",
-  "scripts": {
-    "start": "parcel index.html --open",
-    "build": "parcel build index.html"
-  },
-  "dependencies": {
-    "@pixi/runner": "5.2.0",
-    "three": "0.112.1"
-  },
-  "devDependencies": {
-    "@babel/core": "7.2.0",
-    "parcel-bundler": "^1.6.1"
-  },
-  "keywords": []
+	"name": "vanilla",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.html",
+	"scripts": {
+		"start": "parcel index.html --open",
+		"build": "parcel build index.html"
+	},
+	"dependencies": {
+		"@pixi/runner": "5.2.0",
+		"three": "0.112.1"
+	},
+	"devDependencies": {
+		"@babel/core": "7.2.0",
+		"parcel-bundler": "^1.6.1"
+	},
+	"browserlist": ["last 1 Chrome version"],
+	"keywords": []
 }

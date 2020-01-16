@@ -1,6 +1,7 @@
 import { Vector2 } from "three";
 
 export abstract class AxisInput {
+	protected _name: string = "Abstract";
 	protected _binded: boolean = false;
 	protected _axis: Vector2 = new Vector2();
 
@@ -17,6 +18,10 @@ export abstract class AxisInput {
 
 	protected _callCallback() {
 		this.onInputCalled && this.onInputCalled(this);
+	}
+
+	get name() {
+		return this._name;
 	}
 
 	get enable() {
@@ -45,12 +50,14 @@ export abstract class AxisInput {
 const TMP_V = new Vector2();
 
 export class TouchInput extends AxisInput {
+	_name = "Touch";
 	_lastTouchId: number = -1;
 	_startPoint: Vector2 = new Vector2();
 	_touchStartBind: any;
 	_touchMoveBind: any;
 	_touchEndBind: any;
 
+	// in pixels
 	public minDistance: number = 30;
 
 	public attach(dom: HTMLElement) {
@@ -120,6 +127,8 @@ export class TouchInput extends AxisInput {
 
 		if (TMP_V.length() > this.minDistance) {
 			this._axis.copy(TMP_V).normalize();
+		} else {
+			this._axis.set(0, 0);
 		}
 	}
 
@@ -149,6 +158,8 @@ const KEYMAP = {
 };
 
 export class KeyboarInput extends AxisInput {
+	_name = "Keyboard";
+
 	_keyUpBind: any;
 	_keyDownBind: any;
 	_pressedKeys: Set<number> = new Set();
@@ -210,11 +221,19 @@ export class KeyboarInput extends AxisInput {
 	}
 
 	_keyDown(e: KeyboardEvent) {
+		if (!KEYMAP[e.keyCode]) {
+			return;
+		}
+
 		this._pressedKeys.add(e.keyCode);
 		this._updateAxis();
 	}
 
 	_keyUp(e: KeyboardEvent) {
+		if (!KEYMAP[e.keyCode]) {
+			return;
+		}
+
 		this._pressedKeys.delete(e.keyCode);
 		this._updateAxis();
 	}
@@ -227,8 +246,6 @@ export class KeyboarInput extends AxisInput {
 			x += KEYMAP[code][0];
 			y += KEYMAP[code][1];
 		});
-
-		console.log(x, y);
 
 		this._targetAxis.set(Math.sign(x), Math.sign(y));
 		this._lastAxis.copy(this._axis);
@@ -249,6 +266,7 @@ export class KeyboarInput extends AxisInput {
 export class UniversalInput extends AxisInput {
 	private _methods: AxisInput[] = [new TouchInput(), new KeyboarInput()];
 	private _active: AxisInput;
+	protected _name = "Universal;";
 
 	public attach(dom: HTMLElement) {
 		this._methods.forEach(e => {
@@ -261,8 +279,6 @@ export class UniversalInput extends AxisInput {
 
 	public update(delta: number) {
 		this._methods.forEach(e => e.update(delta));
-
-		this.axis.length() > 0 && console.log(this.axis);
 	}
 
 	public dispose() {
@@ -280,8 +296,6 @@ export class UniversalInput extends AxisInput {
 	private _called(from: AxisInput) {
 		this._active = from;
 		this._callCallback();
-
-		console.log("[INPUT]:", from.constructor.name);
 	}
 
 	get axis() {

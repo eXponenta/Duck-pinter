@@ -1,7 +1,7 @@
-import { Object3D, Mesh, Quaternion, Vector3, Vector2, Geometry, BufferGeometry } from "three";
+import { Object3D, Mesh, Quaternion, Vector3, Vector2, Geometry } from "three";
 
 import { App } from "./../app";
-import { ClosestTriangle, DeltaAngle, IFaceDataEntry } from "../math/Utils";
+import { DeltaAngle, FaceDataEntry } from "../math/Utils";
 
 const ANGLE_EPS = 0.0001;
 const TOP = new Vector3(0, 1, 0);
@@ -9,9 +9,19 @@ const TOP = new Vector3(0, 1, 0);
 const TMP_Q = new Quaternion();
 const TMP_V = new Vector3();
 
-export class Roller2 {
+export interface IFaceDataRequest {
+	point: Vector3;
+	skip: boolean;
+}
+
+export interface IFaceGear {
+	faceRequest?: IFaceDataRequest;
+	onFaceRequestDone(data: FaceDataEntry): void;
+}
+
+export class Roller2 implements IFaceGear {
 	yOffset: number = 0.01;
-	linearSpeed: number = 1;
+	linearSpeed: number = 0.01;
 	angularSpeed: number = Math.PI * 2;
 
 	quaternion: Quaternion = new Quaternion();
@@ -19,6 +29,7 @@ export class Roller2 {
 
 	lastYAngle: number = 0;
 	targetYAngle: number = 0;
+	lastDir: Vector2 = new Vector2(0, -1);
 
 	position: Vector3 = new Vector3(0, 0, 0);
 	targetPos: Vector3 = new Vector3(0, 0, 0);
@@ -26,38 +37,24 @@ export class Roller2 {
 	target: Mesh;
 	geom: Geometry;
 
-	onSolved: (props: IFaceDataEntry) => void | undefined;
+	// IFaceGear
+	faceRequest?: IFaceDataRequest = { point: undefined, skip: true };
 
 	constructor(private app: App, public view: Object3D = undefined) {}
 
 	bind(target: Mesh, from: Vector3) {
 		this.target = target;
-
-		if (this.target.geometry.isGeometry) {
-			this.geom = this.target.geometry as Geometry;
-		} else {
-			this.geom = new Geometry();
-			this.geom.fromBufferGeometry(this.target.geometry as BufferGeometry);
-		}
-
-		const f = this.solvePoint(from);
-
-		this.align(f.face.normal, f.point);
 	}
 
-	solvePoint(from: Vector3) {
-		const data: IFaceDataEntry = ClosestTriangle(this.geom, from, false, Infinity);
+	sendRequest(point: Vector3) {
+		this.faceRequest.point.copy(point);
+		this.faceRequest.skip = false;
+	}
+	// IFaceGear
+	onFaceRequestDone(data: FaceDataEntry): void {
+		this.align(data.face.normal, data.point);
 
-		data.normal = data.face.normal;
-
-		if (!data) {
-			return undefined;
-		}
-
-		data.face.normal.transformDirection(this.target.matrixWorld);
-
-		this.onSolved && this.onSolved(data);
-		return data;
+		this.faceRequest.skip = true;
 	}
 
 	align(normal: Vector3, pos: Vector3) {
@@ -87,19 +84,32 @@ export class Roller2 {
 		this.view.position.copy(this.position);
 	}
 
-	move(delta: Vector2) {
-		if (!this.lastNormal || !this.target) return;
-		if (delta.length() < 0.01) return;
+	moveByThrustRotate(delta: Vector2) {
+		if (delta.length() < 0.01) {
+			return;
+		}
 
-		this.targetYAngle += this.angularSpeed * Math.sign(delta.x) * 0.01; // * +(Math.abs(delta.z) > 0);
+		this.targetYAngle += this.angularSpeed * -delta.x * 0.01; // * +(Math.abs(delta.z) > 0);
 
-		const aligned = TMP_V.set(0, 0, -delta.y * this.linearSpeed);
-		aligned.applyQuaternion(this.quaternion);
-		aligned.add(this.position);
+		const aligned = TMP_V.set(0, 0, delta.y * this.linearSpeed)
+			.applyQuaternion(this.quaternion)
+			.add(this.position);
 
-		const f = this.solvePoint(aligned);
+		this.sendRequest(aligned);
+	}
 
-		this.align(f.face.normal, f.point);
+	moveByDirection(dir: Vector2) {
+		if (dir.length() < 0.5) {
+			return;
+		}
+
+		this.targetYAngle = Math.PI - Math.atan2(dir.x, -dir.y);
+
+		const aligned = TMP_V.set(0, 0, -this.linearSpeed)
+			.applyQuaternion(this.quaternion)
+			.add(this.position);
+
+		this.sendRequest(aligned);
 	}
 
 	update(delta: number) {
