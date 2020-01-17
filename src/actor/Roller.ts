@@ -1,7 +1,14 @@
 import { Object3D, Mesh, Quaternion, Vector3, Vector2, Geometry } from "three";
 
 import { App } from "./../app";
-import { DeltaAngle, FaceDataEntry } from "../math/Utils";
+import {
+	DeltaAngle,
+	FaceResultEntry,
+	IFaceGear,
+	IFaceDataRequest,
+	ISegmentGear,
+	ISegmentGearDataRequest
+} from "../math/Utils";
 
 const ANGLE_EPS = 0.0001;
 const TOP = new Vector3(0, 1, 0);
@@ -9,17 +16,7 @@ const TOP = new Vector3(0, 1, 0);
 const TMP_Q = new Quaternion();
 const TMP_V = new Vector3();
 
-export interface IFaceDataRequest {
-	point: Vector3;
-	skip: boolean;
-}
-
-export interface IFaceGear {
-	faceRequest?: IFaceDataRequest;
-	onFaceRequestDone(data: FaceDataEntry): void;
-}
-
-export class Roller2 implements IFaceGear {
+export class Roller implements IFaceGear, ISegmentGear {
 	yOffset: number = 0.01;
 	linearSpeed: number = 0.01;
 	angularSpeed: number = Math.PI * 2;
@@ -37,6 +34,14 @@ export class Roller2 implements IFaceGear {
 	target: Mesh;
 	geom: Geometry;
 
+	// ISegmentGear
+	segmentRequest?: ISegmentGearDataRequest = {
+		dir: new Vector3(0, 0, 1),
+		skip: true,
+		origin: this.position,
+		dist: 0.1
+	};
+
 	// IFaceGear
 	faceRequest?: IFaceDataRequest = { point: undefined, skip: true };
 
@@ -46,15 +51,26 @@ export class Roller2 implements IFaceGear {
 		this.target = target;
 	}
 
-	sendRequest(point: Vector3) {
+	sendFaceRequest(point: Vector3) {
 		this.faceRequest.point.copy(point);
 		this.faceRequest.skip = false;
 	}
+
+	sendLineRequest() {
+		this.segmentRequest.skip = false;
+		this.segmentRequest.dir.applyQuaternion(this.quaternion);
+		this.segmentRequest.origin = this.position;
+	}
+
 	// IFaceGear
-	onFaceRequestDone(data: FaceDataEntry): void {
+	onFaceRequestDone(data: FaceResultEntry): void {
 		this.align(data.face.normal, data.point);
 
 		this.faceRequest.skip = true;
+	}
+
+	onLineRequestDone(data: ISegmentGearDataRequest) {
+		this.segmentRequest.skip = false;
 	}
 
 	align(normal: Vector3, pos: Vector3) {
@@ -77,6 +93,9 @@ export class Roller2 implements IFaceGear {
 
 		this.position.copy(pos);
 		this.applyView();
+
+		this.sendLineRequest();
+		// update direction
 	}
 
 	applyView() {
@@ -95,7 +114,7 @@ export class Roller2 implements IFaceGear {
 			.applyQuaternion(this.quaternion)
 			.add(this.position);
 
-		this.sendRequest(aligned);
+		this.sendFaceRequest(aligned);
 	}
 
 	moveByDirection(dir: Vector2) {
@@ -109,7 +128,7 @@ export class Roller2 implements IFaceGear {
 			.applyQuaternion(this.quaternion)
 			.add(this.position);
 
-		this.sendRequest(aligned);
+		this.sendFaceRequest(aligned);
 	}
 
 	update(delta: number) {

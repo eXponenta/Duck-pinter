@@ -10,6 +10,7 @@ import {
 	Material,
 	Color
 } from "three";
+import { LinePoint, ILineSegm } from "../math/Utils";
 
 const TMP_T = new Vector3();
 const TMP_V1 = new Vector3();
@@ -17,39 +18,18 @@ const TMP_V2 = new Vector3();
 const TMP_L = new Line3();
 const TMP_P = new Plane();
 
-class LinePoint {
-	constructor(public p: Vector3, public n: Vector3) {}
-
-	clone() {
-		return new LinePoint(this.p.clone(), this.n.clone());
-	}
-}
-
-export interface ILineSegm {
-	a: LinePoint;
-	b: LinePoint;
-	id: number;
-	rope?: Rope;
-}
-
-export interface IIntersectionRegion {
-	a: ILineSegm;
-	b: ILineSegm;
-	point: LinePoint;
-}
-
 export class Rope extends Mesh {
 	private _durty = true;
 	private _lastUpdateIndex = 0;
 	private _parentRope: Rope;
 
-	public points: LinePoint[] = [];
+	public segments: ILineSegm[] = [];
 	public offset = 0.01;
 	public minDistance = 10;
 	public updateNormals = false;
 
-	public selfIntersection: IIntersectionRegion[] = [];
-	public onIntersectionFound: (e: IIntersectionRegion) => void;
+	public selfIntersection: any[] = [];
+	public onIntersectionFound: (e: any) => void;
 
 	constructor(private section: number = 100, private _width = 1, private _color = 0xff0000, private _mat: Material) {
 		super(new PlaneBufferGeometry(_width, section * _width, 1, section), _mat);
@@ -75,7 +55,7 @@ export class Rope extends Mesh {
 	}
 
 	get closed() {
-		return this.points.length === this.section + 1;
+		return this.segments.length === this.section;
 	}
 
 	set color(v) {
@@ -90,20 +70,20 @@ export class Rope extends Mesh {
 	}
 
 	get last() {
-		return this.points[this.points.length - 1];
+		return this.segments[this.segments.length - 1];
 	}
 
 	rebuild(force = false) {
 		if (!this._durty && !force) return;
 
-		if (this.points.length < 2) {
+		if (this.segments.length < 1) {
 			this._durty = false;
 			this.visible = false;
 			return;
 		}
 
 		const g = this.geometry as BufferGeometry;
-		const p = this.points;
+		const p = this.segments;
 		const poss = g.getAttribute("position") as BufferAttribute;
 		const normal = g.getAttribute("normal") as BufferAttribute;
 
@@ -113,9 +93,9 @@ export class Rope extends Mesh {
 		const w = this.width * 0.5;
 		const from = force ? 0 : this._lastUpdateIndex;
 
-		for (let i = from; i < Math.min(p.length, this.section + 1); i += 1) {
-			const f = p[i];
-			const n = p[i + 1] || f;
+		for (let i = from; i < Math.min(p.length, this.section); i += 1) {
+			const f = p[i].a;
+			const n = p[i].b;
 
 			if (n !== f) {
 				t.subVectors(n.p, f.p)
@@ -143,18 +123,17 @@ export class Rope extends Mesh {
 		normal.needsUpdate = true;
 
 		this._durty = false;
-		this._lastUpdateIndex = this.points.length - 1;
+		this._lastUpdateIndex = this.segments.length - 1;
 
 		this.visible = true;
 	}
 
 	join(parent: Rope) {
-		const pp = parent.points;
-		const a = pp[pp.length - 2];
-		const b = pp[pp.length - 1];
+		const pp = parent.segments;
+		const seg = pp[pp.length - 1];
 
-		this.pushPoint(a.p, a.n);
-		this.pushPoint(b.p, b.n);
+		this.pushPoint(seg.a.p, seg.a.n);
+		this.pushPoint(seg.b.p, seg.b.n);
 
 		this.rebuild();
 
@@ -162,32 +141,38 @@ export class Rope extends Mesh {
 	}
 
 	pushPoint(point: Vector3, normal: Vector3, update = false) {
-		if (this.points.length) {
-			//latest placed, real latest point - dynamic link
-			const last2 = this.points[this.points.length - 2];
-			const dist = point.distanceTo(last2.p);
+		const segs = this.segments;
+
+		if (segs.length) {
+			const dist = point.distanceTo(this.last.a.p);
 
 			if (this.minDistance > dist && update) {
 				this._updateLink(point, normal);
-				this._computeSelfIntersecion();
+				//this._computeSelfIntersecion();
 
 				return;
 			}
 		}
 
-		this.points.push(new LinePoint(point, normal));
+		let b = new LinePoint(point, normal);
+		let a = this.last ? this.last.b : b.clone();
+		let id = this.last ? this.last.id + 1 : 0;
 
-		// create link point, used for untiblick
-		if (this.points.length === 1) {
-			this.points.push(this.points[0].clone());
-		}
+		const seg = {
+			a,
+			b,
+			rope: this,
+			id
+		};
+
+		this.segments.push(seg);
 
 		if (update) {
 			this._durty = true;
 			this.rebuild();
 		}
 	}
-
+	/*
 	_computeSelfIntersecion() {
 		const a = this.points[this.points.length - 1];
 		const b = this.points[this.points.length - 2];
@@ -268,14 +253,14 @@ export class Rope extends Mesh {
 		}
 
 		return false;
-	}
+	}*/
 
 	_updateLink(point: Vector3, normal: Vector3) {
-		this.last.n.copy(normal);
-		this.last.p.copy(point);
+		this.last.b.n.copy(normal);
+		this.last.b.p.copy(point);
 
 		//we need shift for updating latest 2 points
-		this._lastUpdateIndex = Math.min(this._lastUpdateIndex, this.points.length - 2);
+		this._lastUpdateIndex = Math.min(this._lastUpdateIndex, this.segments.length - 1);
 		this._durty = true;
 
 		this.rebuild();
@@ -293,7 +278,7 @@ export class Rope extends Mesh {
 	}
 
 	clean() {
-		this.points.length = 0;
+		this.segments.length = 0;
 		this._durty = true;
 		this._lastUpdateIndex = 0;
 		this.onIntersectionFound = undefined;

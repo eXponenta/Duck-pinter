@@ -1,106 +1,100 @@
-import RESOURCES from "./res.json";
-
 import {
-  WebGLRenderTarget,
-  OrthographicCamera,
-  WebGLRenderer,
-  Vector2,
-  Color,
-  Scene,
-  Mesh,
-  Sprite,
-  MeshBasicMaterial,
-  LinearFilter,
-  NearestFilter,
-  RGBFormat,
-  PlaneBufferGeometry,
-  Texture,
-  TextureLoader,
-  CanvasTexture
+	WebGLRenderTarget,
+	OrthographicCamera,
+	WebGLRenderer,
+	Vector2,
+	Color,
+	Scene,
+	Mesh,
+	Sprite,
+	MeshBasicMaterial,
+	LinearFilter,
+	NearestFilter,
+	RGBFormat,
+	PlaneBufferGeometry,
+	Texture
 } from "three";
 
 export interface IPushOpitions {
-  point: Vector2;
-  size?: number;
-  color?: string | number | Color;
-  angle?: number;
-  brush?: Texture;
+	point: Vector2;
+	size?: number;
+	color?: string | number | Color;
+	angle?: number;
+	brush?: Texture;
 }
 
-const canvas = document.createElement("canvas");
-canvas.width = canvas.height = 2;
-const ctx = canvas.getContext("2d");
-
-ctx.fillStyle = "white";
-ctx.fillRect(0, 0, 2, 2);
-
-const NON_BRASH = new CanvasTexture(canvas);
-
 export class RTBlitter extends WebGLRenderTarget {
-  camera = new OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 10);
-  scene = new Scene();
-  _brush: Sprite | Mesh;
-  _brushTex: Texture;
+	private camera = new OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 10);
+	private scene = new Scene();
+	private brushPool: Mesh[] = [];
+	private activeBrush = 0;
+	private dirty = false;
 
-  constructor(private renderer: WebGLRenderer, size = 1024) {
-    super(size, size, {
-      minFilter: LinearFilter,
-      magFilter: NearestFilter,
-      format: RGBFormat
-    });
+	constructor(private renderer: WebGLRenderer, size = 1024) {
+		super(size, size, {
+			minFilter: LinearFilter,
+			magFilter: NearestFilter,
+			format: RGBFormat
+		});
 
-    this._brush = new Mesh(
-      new PlaneBufferGeometry(1, 1),
-      new MeshBasicMaterial({
-        color: "#ff0000",
-        transparent: true,
-        premultipliedAlpha: false
-      })
-    );
+		const g = new PlaneBufferGeometry(1, 1);
 
-    this.camera.position.z = 1;
+		this.brushPool = Array.from({ length: 10 }, () => {
+			let m = new Mesh(g, new MeshBasicMaterial({ color: "#ff0000" }));
+			m.visible = false;
+			return m;
+		});
 
-    this.scene.add(this._brush);
+		this.camera.position.z = 1;
 
-    this._brushTex = new TextureLoader().load(RESOURCES.brushes.default, t => {
-      t.premultiplyAlpha = false;
-      t.minFilter = LinearFilter;
-      t.magFilter = LinearFilter;
-      t.needsUpdate = true;
-    });
+		this.scene.add(...this.brushPool);
 
-    this.clean();
-  }
+		this.clean();
+	}
 
-  clean() {
-    this.push({
-      point: new Vector2(0.5, 0.5),
-      color: 0xffffff,
-      size: this.width,
-      brush: NON_BRASH
-    });
-  }
+	clean() {
+		this.push({
+			point: new Vector2(0.5, 0.5),
+			color: 0xffffff,
+			size: this.width,
+			brush: undefined
+		});
+	}
 
-  push({ point, size = 10, color = 0xff0000, angle, brush }: IPushOpitions) {
-    (this._brush.material as MeshBasicMaterial).color.set(color as any);
-    (this._brush.material as MeshBasicMaterial).map = brush || this._brushTex;
+	push({ point, size = 10, color = 0xff0000, angle, brush }: IPushOpitions) {
+		const brushEl = this.brushPool[this.activeBrush];
+		const uv = point.clone();
+		const scale = size / 1000;
 
-    const uv = point.clone();
-    const scale = size / 1000;
-    const autoClear = this.renderer.autoClear;
+		(brushEl.material as MeshBasicMaterial).color.set(color as any);
+		brushEl.visible = true;
 
-    this.renderer.autoClear = false;
-    this.texture.transformUv(uv);
+		this.renderer.autoClear = false;
+		this.texture.transformUv(uv);
 
-    this._brush.scale.set(scale, scale, scale);
-    this._brush.position.set(uv.x - 0.5, 0.5 - uv.y, 0);
+		brushEl.scale.set(scale, scale, scale);
+		brushEl.position.set(uv.x - 0.5, 0.5 - uv.y, 0);
 
-    this.renderer.setRenderTarget(this);
-    //debugger;
+		this.dirty = true;
+		this.activeBrush++;
 
-    this.renderer.render(this.scene, this.camera);
-    this.renderer.setRenderTarget(null);
+		if (this.activeBrush >= this.brushPool.length) {
+			this.commit();
+		}
+	}
 
-    this.renderer.autoClear = autoClear;
-  }
+	commit() {
+		const autoClear = this.renderer.autoClear;
+
+		this.renderer.setRenderTarget(this);
+
+		this.renderer.render(this.scene, this.camera);
+		this.renderer.setRenderTarget(null);
+
+		this.renderer.autoClear = autoClear;
+
+		this.brushPool.forEach(e => (e.visible = false));
+		this.activeBrush = 0;
+		this.dirty = false;
+	}
 }

@@ -8,19 +8,19 @@ import {
 	Scene,
 	Vector2,
 	BoxBufferGeometry,
-	MeshToonMaterial,
 	MeshPhongMaterial
 } from "three";
 
-import { Roller2 } from "./actor/Roller2";
-import { BaseApp } from "./BaseApp";
-import { PoolMachine } from "./math/PoolMachine";
-import { CameraMachine } from "./actor/CameraMachine";
+import { RollerEntity, ViewCmp, MoveCmp, UserInputCmp } from "./actor/RollerEntity";
+import { PoolMachine, RENDER_MODE } from "./machines/PoolMachine";
+import { CameraMachine } from "./machines/CameraMachine";
 import { UniversalInput } from "./math/Input";
+import { BaseApp } from "./BaseApp";
 
 // TEST ONLY
 const ROPE_POOL_SIZE = 30;
 const ROPE_POOL_LEN = 300;
+const MODE = RENDER_MODE.BLIT;
 
 export class App extends BaseApp {
 	lights = {
@@ -42,6 +42,8 @@ export class App extends BaseApp {
 	constructor(appEl: HTMLElement) {
 		super(appEl);
 
+		this.renderer.sortObjects = false;
+
 		const { d, a } = this.lights;
 
 		d.position.set(2, 2, 2);
@@ -55,7 +57,7 @@ export class App extends BaseApp {
 		//this.controlls.target = this.roller.position;
 
 		this.cameraMachine = new CameraMachine(this.camera);
-		this.poolMachine = new PoolMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN);
+		this.poolMachine = new PoolMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN, MODE);
 	}
 
 	init() {}
@@ -65,11 +67,11 @@ export class App extends BaseApp {
 
 		this.poolMachine.init(this.model);
 
-		this.poolMachine.registerRoller(this.createRoller(0xf4d203), 0xf4d203, new Vector3(1, 0, 4));
-		this.poolMachine.registerRoller(this.createRoller(0x00ff00), 0x00ff00, new Vector3(-1, 0, 4));
+		this.poolMachine.registerRoller(this.createRoller(0xf4d203), 0xf4d203, new Vector3(0, 0, 4));
+		this.poolMachine.registerRoller(this.createRoller(0x00ff00), 0x00ff00, new Vector3(1, 0, 4));
 		this.poolMachine.registerRoller(this.createRoller(0x0000ff), 0x0000ff, new Vector3(-1, 1, 4));
 
-		this.cameraMachine.target = this.player.view;
+		this.cameraMachine.target = this.player.get<ViewCmp>(ViewCmp).view;
 
 		this.runs.update.add(this.input);
 		this.runs.update.add(this.poolMachine);
@@ -107,10 +109,9 @@ export class App extends BaseApp {
 		}
 
 		const scene = await this.getModel("duck");
+		const roller = await this.getModel("roller");
 
 		this.setSurface(scene.scene);
-
-		const roller = await this.getModel("roller");
 
 		this.rollerViewPref = roller.scene;
 
@@ -119,19 +120,24 @@ export class App extends BaseApp {
 	}
 
 	update(delta) {
-		this.lights.d.position.copy(this.player.position);
+		const move = this.player.get<MoveCmp>(MoveCmp);
+		const input = this.player.get<UserInputCmp>(UserInputCmp);
+
+		this.lights.d.position.copy(move.position);
 
 		if (this.input.activeInput) {
 			if (this.input.activeInput.name === "Keyboard") {
-				this.player.moveByThrustRotate(this.input.axis);
+				input.moveByThrustRotate(this.input.axis);
 			} else {
-				this.player.moveByDirection(this.input.axis);
+				input.moveByDirection(this.input.axis);
 			}
 		}
 
-		// почему нет?
-		this.poolMachine.rollersFlat[1].moveByDirection(new Vector2(0, -1));
-		this.poolMachine.rollersFlat[2].moveByDirection(new Vector2(0, 1));
+		this.poolMachine.rollersFlat.forEach(e => {
+			if (e === this.player) return;
+
+			e.get<UserInputCmp>(UserInputCmp).moveByDirection(new Vector2(0, -1));
+		});
 	}
 
 	createRoller(color: number) {
@@ -142,6 +148,6 @@ export class App extends BaseApp {
 
 		frame.geometry.translate(0, 0.05, 0);
 
-		return new Roller2(this, frame);
+		return new RollerEntity(frame);
 	}
 }
