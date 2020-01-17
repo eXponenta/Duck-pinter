@@ -117,6 +117,7 @@ export class UserInputCmp {
 	private _view: ViewCmp;
 	private _move: MoveCmp;
 	private _surf: SurfCalcCmp;
+	private _lastDir: Vector2 = new Vector2(0, -1);
 
 	constructor(public target: IEntity) {}
 
@@ -147,7 +148,15 @@ export class UserInputCmp {
 			return;
 		}
 
-		this._move.targetYAngle = Math.PI - Math.atan2(dir.x, -dir.y);
+		const dist = dir.distanceTo(this._lastDir);
+
+		if (dist > 0.0001) {
+			const angle = Math.acos(dir.dot(this._lastDir));
+			const sign = Math.sign(dir.cross(this._lastDir));
+
+			this._move.targetYAngle += angle * sign;
+			this._lastDir.copy(dir);
+		}
 
 		const aligned = TMP_V.set(0, 0, -this._move.linearSpeed)
 			.applyQuaternion(this._move.quaternion)
