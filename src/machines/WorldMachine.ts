@@ -1,15 +1,7 @@
 import { Rope } from "../geom/Rope";
 import { Scene, Mesh, Vector3, ArrowHelper, Geometry, BufferGeometry, MeshPhongMaterial, VertexColors } from "three";
 
-import { Roller } from "./../actor/Roller";
-import {
-	FaceResultEntry,
-	ClosestTriangle,
-	ISegmentResultEntry,
-	ClosestSegment,
-	ILineSegm,
-	IFaceGear
-} from "./../math/Utils";
+import { FaceResultEntry, ClosestTriangle, ISegmentResultEntry, ILineSegm, IFaceGear } from "./../math/Utils";
 
 import { RTBlitter } from "./../math/RTBlitter";
 import { App } from "../app";
@@ -34,7 +26,7 @@ export enum RENDER_MODE {
 
 const DEF_ROPE_WIDTH = 0.1;
 
-export class PoolMachine {
+export class WorldMachine {
 	private ropePool: IRopePoolEntry[] = [];
 	private activeRopesFlat: Rope[] = [];
 	private ropeMat: MeshPhongMaterial = new MeshPhongMaterial({ vertexColors: VertexColors, depthWrite: true });
@@ -128,9 +120,12 @@ export class PoolMachine {
 	}
 
 	update(delta: number) {
+		this.rollersFlat.forEach(r => {
+			r.update(delta);
+		});
+
 		// search closes points avery frame
 		this._calcClosestPoints();
-		//this._calcClosestLine();
 	}
 
 	reset() {
@@ -179,23 +174,6 @@ export class PoolMachine {
 
 		if (this.renderMode === RENDER_MODE.BLIT) {
 			//this.rt.commit();
-		}
-	}
-
-	// doesnt works correct yet
-	_calcClosestLine() {
-		const results: ISegmentResultEntry[] = [];
-		const gears = this.rollersFlat;
-
-		ClosestSegment({
-			from: gears,
-			lines: this.activeRopesFlat,
-			skipLastSegment: true,
-			results
-		});
-
-		for (let r of results) {
-			this._onIntersection(r);
 		}
 	}
 

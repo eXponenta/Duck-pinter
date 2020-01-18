@@ -1,15 +1,14 @@
-import { Entity, IComponent, IEntity } from "../components/ComponentSystem";
+import { Entity, Component } from "../components/ComponentSystem";
 import { Object3D, Quaternion, Vector3, Vector2 } from "three";
 import { DeltaAngle, IFaceGear, FaceResultEntry, IFaceDataRequest } from "../math/Utils";
+import { UniversalInput } from "../math/Input";
 
-export class ViewCmp implements IComponent {
+export class ViewCmp extends Component {
 	name: string = "view";
 	view: Object3D;
 
 	// view anglular interpolation speed.
 	angularIntrpSpeed: number = Math.PI * 2;
-
-	constructor(public target: IEntity) {}
 
 	update?(delta: number): void {
 		const move = this.target.get<MoveCmp>(MoveCmp);
@@ -29,22 +28,31 @@ const TOP = new Vector3(0, 1, 0);
 const TMP_Q = new Quaternion();
 const TMP_V = new Vector3();
 
-export class MoveCmp implements IComponent {
+export class MoveCmp extends Component {
 	name: string = "move";
 
-	yOffset: number = 0.01;
-	linearSpeed: number = 0.01;
+	public yOffset: number = 0.01;
+	public linearSpeed: number = 0.01;
 
-	quaternion: Quaternion = new Quaternion();
-	position: Vector3 = new Vector3();
+	public quaternion: Quaternion = new Quaternion();
+	public position: Vector3 = new Vector3();
 
-	lastNormal: Vector3 = new Vector3(0, 1, 0);
-	targetPos: Vector3 = new Vector3();
+	private lastNormal: Vector3 = new Vector3(0, 1, 0);
+	private targetPos: Vector3 = new Vector3();
 
-	lastYAngle: number = 0;
-	targetYAngle: number = 0;
+	private lastYAngle: number = 0;
+	private targetYAngle: number = 0;
 
-	constructor(public target: IEntity) {}
+	private _view: ViewCmp;
+	private _move: MoveCmp;
+	private _surf: SurfCalcCmp;
+	private _lastDir: Vector2 = new Vector2(0, -1);
+
+	onInit() {
+		this._view = this.target.get<ViewCmp>(ViewCmp);
+		this._move = this.target.get<MoveCmp>(MoveCmp);
+		this._surf = this.target.get<SurfCalcCmp>(SurfCalcCmp);
+	}
 
 	update?(delta: number): void {}
 
@@ -72,62 +80,6 @@ export class MoveCmp implements IComponent {
 		//this.sendLineRequest();
 		// update direction
 	}
-}
-
-export class SurfCalcCmp implements IComponent, IFaceGear {
-	name: "surfCalc";
-
-	private _move: MoveCmp;
-
-	faceRequest?: IFaceDataRequest = { point: undefined, skip: true };
-
-	constructor(public target: IEntity) {}
-
-	onInit() {
-		this._move = this.target.get<MoveCmp>(MoveCmp);
-	}
-
-	sendFaceRequest(point: Vector3) {
-		this.faceRequest.point.copy(point);
-		this.faceRequest.skip = false;
-	}
-	/*
-	sendLineRequest() {
-		this.segmentRequest.skip = false;
-		this.segmentRequest.dir.applyQuaternion(this.quaternion);
-		this.segmentRequest.origin = this.position;
-  }*/
-
-	// IFaceGear
-	onFaceRequestDone(data: FaceResultEntry): void {
-		this._move.align(data.face.normal, data.point);
-		this.faceRequest.skip = true;
-	}
-	/*
-	onLineRequestDone(data: ISegmentGearDataRequest) {
-		this.segmentRequest.skip = false;
-  }*/
-
-	update?(delta: number): void {}
-}
-
-export class UserInputCmp {
-	name: "userInput";
-
-	private _view: ViewCmp;
-	private _move: MoveCmp;
-	private _surf: SurfCalcCmp;
-	private _lastDir: Vector2 = new Vector2(0, -1);
-
-	constructor(public target: IEntity) {}
-
-	onInit() {
-		this._view = this.target.get<ViewCmp>(ViewCmp);
-		this._move = this.target.get<MoveCmp>(MoveCmp);
-		this._surf = this.target.get<SurfCalcCmp>(SurfCalcCmp);
-	}
-
-	update?(delta: number): void {}
 
 	moveByThrustRotate(delta: Vector2) {
 		if (delta.length() < 0.01) {
@@ -166,9 +118,70 @@ export class UserInputCmp {
 	}
 }
 
+export class SurfCalcCmp extends Component implements IFaceGear {
+	name: "surfCalc";
+
+	private _move: MoveCmp;
+
+	faceRequest?: IFaceDataRequest = { point: undefined, skip: true };
+
+	onInit() {
+		this._move = this.target.get<MoveCmp>(MoveCmp);
+	}
+
+	sendFaceRequest(point: Vector3) {
+		this.faceRequest.point.copy(point);
+		this.faceRequest.skip = false;
+	}
+	/*
+	sendLineRequest() {
+		this.segmentRequest.skip = false;
+		this.segmentRequest.dir.applyQuaternion(this.quaternion);
+		this.segmentRequest.origin = this.position;
+  }*/
+
+	// IFaceGear
+	onFaceRequestDone(data: FaceResultEntry): void {
+		this._move.align(data.face.normal, data.point);
+		this.faceRequest.skip = true;
+	}
+	/*
+	onLineRequestDone(data: ISegmentGearDataRequest) {
+		this.segmentRequest.skip = false;
+  }*/
+
+	update?(delta: number): void {}
+}
+
+export class UserInputCmp extends Component {
+	name: "userInput";
+
+	public input: UniversalInput;
+
+	private _move: MoveCmp;
+
+	onInit() {
+		this._move = this.target.get<MoveCmp>(MoveCmp);
+	}
+
+	update?(delta: number): void {
+		const input = this.input;
+
+		if (!input || !input.activeInput || !input.enable) {
+			return;
+		}
+
+		if (input.activeInput.name === "Keyboard") {
+			this._move.moveByThrustRotate(input.axis);
+		} else {
+			this._move.moveByDirection(input.axis);
+		}
+	}
+}
+
 export class RollerEntity extends Entity {
 	constructor(view: Object3D) {
-		super(ViewCmp, MoveCmp, SurfCalcCmp, UserInputCmp);
+		super(ViewCmp, SurfCalcCmp, MoveCmp);
 
 		const vcmp = this.get<ViewCmp>(ViewCmp);
 		vcmp.view = view;

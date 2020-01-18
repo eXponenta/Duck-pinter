@@ -16,6 +16,10 @@ const TOP = new Vector3(0, 1, 0);
 const TMP_Q = new Quaternion();
 const TMP_V = new Vector3();
 
+/**
+ * @deprecated
+ * @description LEGACY CLASS. Look RollerEntity for new implementation
+ */
 export class Roller implements IFaceGear, ISegmentGear {
 	yOffset: number = 0.01;
 	linearSpeed: number = 0.01;

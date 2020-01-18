@@ -6,14 +6,44 @@ import {
 	Color,
 	Scene,
 	Mesh,
-	Sprite,
 	MeshBasicMaterial,
 	LinearFilter,
 	NearestFilter,
-	RGBFormat,
+	RGBAFormat,
 	PlaneBufferGeometry,
-	Texture
+	Texture,
+	CanvasTexture
 } from "three";
+
+function generateCircleBrush(size = 10) {
+	const c = document.createElement("canvas");
+	c.width = c.height = size;
+
+	const ctx = c.getContext("2d");
+
+	ctx.fillStyle = "white";
+	ctx.imageSmoothingEnabled = true;
+
+	ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+	ctx.fill();
+
+	return new CanvasTexture(c);
+}
+
+function generateEmptyBrush() {
+	const c = document.createElement("canvas");
+	c.width = c.height = 2;
+
+	const ctx = c.getContext("2d");
+
+	ctx.fillStyle = "white";
+	ctx.fillRect(0, 0, 2, 2);
+
+	return new CanvasTexture(c);
+}
+
+const BRUSH = generateCircleBrush(64);
+const EMPTY = generateEmptyBrush();
 
 export interface IPushOpitions {
 	point: Vector2;
@@ -34,21 +64,32 @@ export class RTBlitter extends WebGLRenderTarget {
 		super(size, size, {
 			minFilter: LinearFilter,
 			magFilter: NearestFilter,
-			format: RGBFormat
+			format: RGBAFormat
 		});
 
 		const g = new PlaneBufferGeometry(1, 1);
 
 		this.brushPool = Array.from({ length: 10 }, () => {
-			let m = new Mesh(g, new MeshBasicMaterial({ color: "#ff0000" }));
+			let m = new Mesh(
+				g,
+				new MeshBasicMaterial({
+					premultipliedAlpha: false,
+					/*
+					blending: CustomBlending,
+					blendDst: DstColorFactor,
+					blendSrc: OneFactor,*/
+
+					transparent: true,
+					depthTest: false,
+					depthWrite: false
+				})
+			);
 			m.visible = false;
 			return m;
 		});
 
 		this.camera.position.z = 1;
-
 		this.scene.add(...this.brushPool);
-
 		this.clean();
 	}
 
@@ -57,8 +98,9 @@ export class RTBlitter extends WebGLRenderTarget {
 			point: new Vector2(0.5, 0.5),
 			color: 0xffffff,
 			size: this.width,
-			brush: undefined
+			brush: EMPTY
 		});
+		this.commit();
 	}
 
 	push({ point, size = 10, color = 0xff0000, angle, brush }: IPushOpitions) {
@@ -67,11 +109,12 @@ export class RTBlitter extends WebGLRenderTarget {
 		const scale = size / 1000;
 
 		(brushEl.material as MeshBasicMaterial).color.set(color as any);
-		brushEl.visible = true;
+		(brushEl.material as MeshBasicMaterial).map = brush;
+		(brushEl.material as MeshBasicMaterial).needsUpdate = true;
 
-		this.renderer.autoClear = false;
 		this.texture.transformUv(uv);
 
+		brushEl.visible = true;
 		brushEl.scale.set(scale, scale, scale);
 		brushEl.position.set(uv.x - 0.5, 0.5 - uv.y, 0);
 
@@ -84,8 +127,13 @@ export class RTBlitter extends WebGLRenderTarget {
 	}
 
 	commit() {
+		if (!this.dirty) {
+			return;
+		}
+
 		const autoClear = this.renderer.autoClear;
 
+		this.renderer.autoClear = false;
 		this.renderer.setRenderTarget(this);
 
 		this.renderer.render(this.scene, this.camera);

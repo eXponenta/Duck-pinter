@@ -1,11 +1,11 @@
 import { Vector2 } from "three";
 
-export abstract class AxisInput {
+export abstract class AxesInput {
 	protected _name: string = "Abstract";
 	protected _binded: boolean = false;
 	protected _axis: Vector2 = new Vector2();
 
-	public onInputCalled: (from: AxisInput) => void;
+	public onInputCalled: (from: AxesInput) => void;
 	public lerpTime: number = 0.1;
 	public dom: HTMLElement;
 
@@ -49,7 +49,7 @@ export abstract class AxisInput {
 
 const TMP_V = new Vector2();
 
-export class TouchInput extends AxisInput {
+export class TouchInput extends AxesInput {
 	_name = "Touch";
 	_lastTouchId: number = -1;
 	_startPoint: Vector2 = new Vector2();
@@ -157,7 +157,7 @@ const KEYMAP = {
 	39: [1, 0]
 };
 
-export class KeyboarInput extends AxisInput {
+export class KeyboarInput extends AxesInput {
 	_name = "Keyboard";
 
 	_keyUpBind: any;
@@ -263,9 +263,14 @@ export class KeyboarInput extends AxisInput {
 	}
 }
 
-export class UniversalInput extends AxisInput {
-	private _methods: AxisInput[] = [new TouchInput(), new KeyboarInput()];
-	private _active: AxisInput;
+/**
+ * @class
+ * @description Universal input. Implement all supported inputs methods (touch and keyboard) with autoselect
+ */
+
+export class UniversalInput extends AxesInput {
+	private _methods: AxesInput[] = [new TouchInput(), new KeyboarInput()];
+	private _active: AxesInput;
 	protected _name = "Universal;";
 
 	public attach(dom: HTMLElement) {
@@ -287,13 +292,15 @@ export class UniversalInput extends AxisInput {
 
 	protected _bindInput() {
 		this._methods.forEach(e => (e.enable = true));
+		this._binded = true;
 	}
 
 	protected _unbindInput() {
 		this._methods.forEach(e => (e.enable = false));
+		this._binded = false;
 	}
 
-	private _called(from: AxisInput) {
+	private _called(from: AxesInput) {
 		this._active = from;
 		this._callCallback();
 	}
@@ -304,5 +311,9 @@ export class UniversalInput extends AxisInput {
 
 	get activeInput() {
 		return this._active;
+	}
+
+	static get supported() {
+		return KeyboarInput.supported || TouchInput.supported;
 	}
 }
