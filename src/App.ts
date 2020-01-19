@@ -8,7 +8,8 @@ import {
 	Scene,
 	Vector2,
 	BoxBufferGeometry,
-	MeshPhongMaterial
+	MeshPhongMaterial,
+	Color
 } from "three";
 
 import { RollerEntity, ViewCmp, MoveCmp, UserInputCmp } from "./actor/RollerEntity";
@@ -19,7 +20,7 @@ import { BaseApp } from "./BaseApp";
 
 // TEST ONLY
 const ROPE_POOL_SIZE = 30; // how many lines for MESH render mode
-const ROPE_POOL_LEN = 300; // how many segments per line for MESH render mode
+const ROPE_POOL_LEN = 600; // how many segments per line for MESH render mode
 const MODE = RENDER_MODE.BLIT; // BLIT - pixel render, MESH - line render
 
 export class App extends BaseApp {
@@ -34,14 +35,16 @@ export class App extends BaseApp {
 	worldMachine: WorldMachine;
 	cameraMachine: CameraMachine;
 	rollerViewPref: Scene;
+	options: any;
 
 	get player() {
 		return this.worldMachine.rollersFlat[0];
 	}
 
-	constructor(appEl: HTMLElement) {
+	constructor(appEl: HTMLElement, options: { mobs: number; mode: string; spikes: boolean }) {
 		super(appEl);
 
+		this.options = options;
 		this.renderer.sortObjects = false;
 
 		const { d, a } = this.lights;
@@ -57,8 +60,12 @@ export class App extends BaseApp {
 		//this.controlls = new OrbitControls(this.camera, this.renderer.domElement);
 		//this.controlls.target = this.roller.position;
 
+		const mode = (options.mode || "mesh") === "mesh" ? RENDER_MODE.MESH : RENDER_MODE.BLIT;
+
 		this.cameraMachine = new CameraMachine(this.camera);
-		this.worldMachine = new WorldMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN, MODE);
+		this.worldMachine = new WorldMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN, mode);
+
+		this.worldMachine.renderSpikes = options.spikes !== undefined ? options.spikes : false;
 	}
 
 	init() {}
@@ -69,9 +76,18 @@ export class App extends BaseApp {
 		// bin surface to machine
 		this.worldMachine.init(this.model);
 
+		// player
 		this.worldMachine.registerRoller(this.createRoller(0xf4d203), 0xf4d203, new Vector3(0, 0, 4));
-		this.worldMachine.registerRoller(this.createRoller(0x00ff00), 0x00ff00, new Vector3(1, 0, 4));
-		this.worldMachine.registerRoller(this.createRoller(0x0000ff), 0x0000ff, new Vector3(-1, 1, 4));
+
+		const count = Math.min(15, this.options.mobs || 3);
+
+		for (let i = 0; i < count; i++) {
+			const c = new Color(Math.random(), Math.random(), Math.random());
+			const x = -3 + (6 * i) / count;
+			const y = 2 * (-0.5 + Math.random());
+
+			this.worldMachine.registerRoller(this.createRoller(c.getHex()), c.getHex(), new Vector3(x, y, 4));
+		}
 
 		// bind user input to roller
 		const inputCmp = this.player.addFirst<UserInputCmp>(UserInputCmp);

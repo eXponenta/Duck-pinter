@@ -1,8 +1,19 @@
 import { Entity, Component } from "../components/ComponentSystem";
 import { Object3D, Quaternion, Vector3, Vector2 } from "three";
-import { DeltaAngle, IFaceGear, FaceResultEntry, IFaceDataRequest } from "../math/Utils";
+import {
+	DeltaAngle,
+	IFaceGear,
+	FaceResultEntry,
+	IFaceDataRequest,
+	ISegmentGearDataRequest,
+	ISegmentGear
+} from "../math/Utils";
 import { UniversalInput } from "../math/Input";
+import { Rope } from "../geom/Rope";
 
+/**
+ * @description Bind view to roller entity
+ */
 export class ViewCmp extends Component {
 	name: string = "view";
 	view: Object3D;
@@ -28,6 +39,9 @@ const TOP = new Vector3(0, 1, 0);
 const TMP_Q = new Quaternion();
 const TMP_V = new Vector3();
 
+/**
+ * @description Base movement component of roller
+ */
 export class MoveCmp extends Component {
 	name: string = "move";
 
@@ -118,6 +132,9 @@ export class MoveCmp extends Component {
 	}
 }
 
+/**
+ * @description Surface componet with IFaceGear implementation, used in WorldMachine
+ */
 export class SurfCalcCmp extends Component implements IFaceGear {
 	name: "surfCalc";
 
@@ -133,26 +150,16 @@ export class SurfCalcCmp extends Component implements IFaceGear {
 		this.faceRequest.point.copy(point);
 		this.faceRequest.skip = false;
 	}
-	/*
-	sendLineRequest() {
-		this.segmentRequest.skip = false;
-		this.segmentRequest.dir.applyQuaternion(this.quaternion);
-		this.segmentRequest.origin = this.position;
-  }*/
 
-	// IFaceGear
 	onFaceRequestDone(data: FaceResultEntry): void {
 		this._move.align(data.face.normal, data.point);
 		this.faceRequest.skip = true;
 	}
-	/*
-	onLineRequestDone(data: ISegmentGearDataRequest) {
-		this.segmentRequest.skip = false;
-  }*/
-
-	update?(delta: number): void {}
 }
 
+/**
+ * @description User imput component. Handle input for roller
+ */
 export class UserInputCmp extends Component {
 	name: "userInput";
 
@@ -179,9 +186,46 @@ export class UserInputCmp extends Component {
 	}
 }
 
+/**
+ * @description Bind ropers for specific roller
+ */
+export class RopeDataCmp extends Component {
+	name: "ropeData";
+	public color: number = 0xff0000;
+	public ropes: Rope[] = [];
+}
+
+/**
+ * @description Class implement ISegmentGear for segment intersection check
+ */
+export class IntersecCmp extends Component implements ISegmentGear {
+	name: "intersect";
+	private _move: MoveCmp;
+
+	segmentRequest?: ISegmentGearDataRequest = {
+		dir: new Vector3(0, 0, -1),
+		dist: 0.1,
+		skip: false,
+		origin: undefined
+	};
+
+	onInit() {
+		this._move = this.target.get<MoveCmp>(MoveCmp);
+		this.segmentRequest.origin = this._move.position;
+	}
+
+	update(delta: number) {
+		// map direction
+		this.segmentRequest.dir.set(0, 0, -1).applyQuaternion(this._move.quaternion);
+	}
+}
+
+/**
+ * @description Base Roller entity group
+ */
 export class RollerEntity extends Entity {
 	constructor(view: Object3D) {
-		super(ViewCmp, SurfCalcCmp, MoveCmp);
+		super(ViewCmp, SurfCalcCmp, MoveCmp, IntersecCmp, RopeDataCmp);
 
 		const vcmp = this.get<ViewCmp>(ViewCmp);
 		vcmp.view = view;

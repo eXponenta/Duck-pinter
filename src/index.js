@@ -1,12 +1,17 @@
 import "./styles.css";
-import { App } from "./app.ts";
+import { App } from "./App.ts";
 
 const appEl = document.querySelector("#app");
 const ltext = document.querySelector("#ltext");
 const loader = document.querySelector("#loader");
 
 (async function() {
-	const app = new App(appEl);
+	const params = new URL(document.location).searchParams;
+	const app = new App(appEl, {
+		mode: params.get("mode"),
+		mobs: Number(params.get("mobs")) || 3,
+		spikes: params.get("spikes")
+	});
 
 	app.init();
 

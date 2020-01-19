@@ -1,11 +1,32 @@
 import { Rope } from "../geom/Rope";
-import { Scene, Mesh, Vector3, ArrowHelper, Geometry, BufferGeometry, MeshPhongMaterial, VertexColors } from "three";
+import {
+	Scene,
+	Mesh,
+	Vector3,
+	ArrowHelper,
+	Geometry,
+	BufferGeometry,
+	MeshPhongMaterial,
+	VertexColors,
+	Raycaster
+} from "three";
 
-import { FaceResultEntry, ClosestTriangle, ISegmentResultEntry, ILineSegm, IFaceGear } from "./../math/Utils";
+import {
+	FaceResultEntry,
+	ClosestTriangle,
+	ClosestSegment,
+	ISegmentResultEntry,
+	ILineSegm,
+	IFaceGear,
+	ISegmentGear,
+	ISegmentGearDataRequest
+} from "./../math/Utils";
 
 import { RTBlitter } from "./../math/RTBlitter";
-import { App } from "../app";
-import { RollerEntity, ViewCmp, SurfCalcCmp } from "../actor/RollerEntity";
+import { App } from "../App";
+import { RollerEntity, ViewCmp, SurfCalcCmp, MoveCmp, RopeDataCmp, IntersecCmp } from "../actor/RollerEntity";
+import { Component } from "../components/ComponentSystem";
+import { FaceOctree } from "../math/Octree";
 
 export interface IRopePoolEntry {
 	rope: Rope;
@@ -35,9 +56,11 @@ export class WorldMachine {
 	private checkResults: FaceResultEntry[] = [];
 	private rt: RTBlitter;
 	private intersections: Set<ILineSegm> = new Set();
+	private octree: FaceOctree;
+	private raycaster: Raycaster = new Raycaster();
 
-	public rollers: Map<RollerEntity, IRollerEntry> = new Map();
 	public rollersFlat: RollerEntity[] = [];
+	public renderSpikes: boolean = false;
 
 	constructor(
 		private scene: Scene,
@@ -45,26 +68,31 @@ export class WorldMachine {
 		ropeSize = 300,
 		private renderMode = RENDER_MODE.MESH
 	) {
-		if (renderMode === RENDER_MODE.MESH) {
-			this.ropePool = Array.from({ length: ropePoolSize }, () => {
-				const rope = new Rope(ropeSize, DEF_ROPE_WIDTH, 0xff0000, this.ropeMat);
+		this.ropePool = Array.from({ length: ropePoolSize }, () => {
+			const rope = new Rope(ropeSize, DEF_ROPE_WIDTH, 0xff0000, this.ropeMat);
 
-				rope.minDistance = 0.05;
-				rope.updateNormals = true;
+			rope.minDistance = 0.05;
+			return {
+				rope,
+				used: false
+			};
+		});
 
-				return {
-					rope,
-					used: false,
-					full: false
-				};
-			});
-		} else {
+		if (renderMode === RENDER_MODE.BLIT) {
 			this.rt = new RTBlitter(App.instance.renderer, 2048);
 		}
 	}
 
 	init(mesh: Mesh) {
 		this.surface = mesh;
+
+		this.octree = FaceOctree.fromMesh(mesh);
+
+		const nodes = this.octree.genNodeLevel(4);
+
+		this.scene.add(nodes);
+
+		console.log(this.octree);
 
 		if (this.surface.geometry.isGeometry) {
 			this.geom = this.surface.geometry as Geometry;
@@ -85,35 +113,32 @@ export class WorldMachine {
 	registerRoller(roller: RollerEntity, color: number, initial?: Vector3) {
 		if (!this.surface) throw new Error("U must init before roolers registering");
 
-		let registry;
+		const registry = this._getFreeRope();
+		const ropeDataCmp = roller.get<RopeDataCmp>(RopeDataCmp);
+		const surfCmp = roller.get<SurfCalcCmp>(SurfCalcCmp);
 
-		if (this.renderMode === RENDER_MODE.MESH) {
-			registry = this._getFreeRope();
+		registry.used = true;
+		registry.rope.color = color;
 
-			registry.used = true;
-			registry.rope.color = color;
-			registry.rope.onIntersectionFound = this._onIntersection.bind(this);
+		ropeDataCmp.ropes = [registry.rope];
+		ropeDataCmp.color = color;
 
-			this.activeRopesFlat.push(registry.rope);
-		}
+		// set initial point for search
+		surfCmp.faceRequest.point = initial;
 
-		this.rollers.set(roller, {
-			roller,
-			ropes: [registry],
-			color,
-			initial: initial || new Vector3(0, 0, 5)
-		});
-
+		this.activeRopesFlat.push(registry.rope);
 		this.rollersFlat.push(roller);
 		this.checkResults.push(new FaceResultEntry());
 
+		// add view from roller to scene
 		this.scene.add(roller.get<ViewCmp>(ViewCmp).view);
 	}
 
 	spawn() {
-		this.rollers.forEach(e => {
-			e.roller.get<SurfCalcCmp>(SurfCalcCmp).faceRequest.point = e.initial;
-			e.roller.get<SurfCalcCmp>(SurfCalcCmp).faceRequest.skip = false;
+		this.rollersFlat.forEach(e => {
+			// setted on registerRoller
+			// e.roller.get<SurfCalcCmp>(SurfCalcCmp).faceRequest.point = e.initial;
+			e.get<SurfCalcCmp>(SurfCalcCmp).faceRequest.skip = false;
 		});
 
 		this._calcClosestPoints();
@@ -126,6 +151,10 @@ export class WorldMachine {
 
 		// search closes points avery frame
 		this._calcClosestPoints();
+
+		if (this.renderSpikes) {
+			this._calcClosestSegment();
+		}
 	}
 
 	reset() {
@@ -135,8 +164,53 @@ export class WorldMachine {
 		});
 		this.activeRopesFlat.length = 0;
 
-		this.rollers.forEach(e => this.scene.remove(e.roller.get<ViewCmp>(ViewCmp).view));
-		this.rollers.clear();
+		this.rollersFlat.forEach(e => this.scene.remove(e.get<ViewCmp>(ViewCmp).view));
+		this.rollersFlat.length = 0;
+	}
+
+	_calcClosestPointsFast(useRay = false) {
+		const from: IFaceGear[] = this.rollersFlat.map(e => e.get<SurfCalcCmp>(SurfCalcCmp));
+
+		if (from.length === 0) {
+			return;
+		}
+
+		const r = [];
+
+		for (let i = 0; i < from.length; i++) {
+			const g = from[i];
+
+			if (!g.faceRequest.skip) {
+				continue;
+			}
+
+			const res = this._calcClosestPointPart(g, useRay);
+
+			g.onFaceRequestDone && g.onFaceRequestDone(res as any);
+
+			this._updateRopeData(this.rollersFlat[i], res as any);
+
+			// important!!
+			//g.faceRequest.reset();
+		}
+	}
+
+	_calcClosestPointPart(gear: IFaceGear, raycast = false) {
+		if (raycast) {
+			const rr = this.raycaster;
+
+			rr.ray.origin.copy(gear.faceRequest.point);
+			rr.ray.direction
+				.copy(this.surface.position)
+				.sub(gear.faceRequest.point)
+				.normalize();
+
+			const nearest = rr.intersectObject(this.octree as any, false);
+
+			return nearest[0];
+		} else {
+			return this.octree.closestPoint(gear.faceRequest.point);
+		}
 	}
 
 	_calcClosestPoints() {
@@ -177,49 +251,70 @@ export class WorldMachine {
 		}
 	}
 
+	_calcClosestSegment() {
+		const from = this.rollersFlat.map(e => e.get<IntersecCmp>(IntersecCmp));
+		const lines = this.activeRopesFlat;
+
+		const results: ISegmentResultEntry[] = [];
+
+		ClosestSegment({
+			from,
+			lines,
+			results,
+			skipLastSegment: true
+		});
+
+		results.forEach((e, i) => {
+			this._onIntersection(e);
+		});
+	}
+
 	_onIntersection(region: ISegmentResultEntry) {
 		if (this.intersections.has(region.segment)) return;
 
 		this.intersections.add(region.segment);
 
-		const d = new ArrowHelper(region.point.n, region.point.p, 0.5, 0xff0000);
+		const d = new ArrowHelper(region.point.n, region.point.p, 0.25, region.rope.color);
 		this.scene.add(d);
 	}
 
 	_updateRopeData(from: RollerEntity, data: FaceResultEntry) {
-		const rollerData = this.rollers.get(from);
-
-		if (!rollerData) {
-			throw Error("Rolles can't be registered!");
-		}
-
 		if (this.renderMode === RENDER_MODE.BLIT) {
-			return this._blit2RT(from, data);
+			this._blit2RT(from, data);
 		}
 
-		let curRope = rollerData.ropes[rollerData.ropes.length - 1];
+		const ropeDataCmp = from.get<RopeDataCmp>(RopeDataCmp);
 
-		curRope.rope.pushPoint(data.point, data.normal, true);
+		if (!ropeDataCmp) {
+			throw new Error("Invalid roller instance!");
+		}
 
-		if (curRope.rope.closed) {
+		let curRope = ropeDataCmp.ropes[ropeDataCmp.ropes.length - 1];
+
+		curRope.pushPoint(data.point, data.normal, true);
+
+		if (curRope.closed) {
 			const nextRope = this._getFreeRope();
 
 			nextRope.used = true;
-			nextRope.rope.color = rollerData.color;
-			nextRope.rope.join(curRope.rope);
-			nextRope.rope.onIntersectionFound = this._onIntersection.bind(this);
+			nextRope.rope.color = ropeDataCmp.color;
+			nextRope.rope.join(curRope);
 
-			rollerData.ropes.push(nextRope);
+			ropeDataCmp.ropes.push(nextRope.rope);
 			this.activeRopesFlat.push(nextRope.rope);
 		}
 	}
 
 	_blit2RT(from: RollerEntity, data: FaceResultEntry) {
-		const color = this.rollers.get(from).color;
+		const ropeDataCmp = from.get<RopeDataCmp>(RopeDataCmp);
+
+		if (!ropeDataCmp) {
+			throw new Error("Invalid roller instance!");
+		}
 
 		this.rt.push({
 			point: data.uv,
-			color,
+			color: ropeDataCmp.color,
 			size: 10.2
 		});
 	}
