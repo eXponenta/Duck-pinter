@@ -50,7 +50,7 @@ const DEF_ROPE_WIDTH = 0.1;
 export class WorldMachine {
 	private ropePool: IRopePoolEntry[] = [];
 	private activeRopesFlat: Rope[] = [];
-	private ropeMat: MeshPhongMaterial = new MeshPhongMaterial({ vertexColors: VertexColors, depthWrite: true });
+	private ropeMat: MeshPhongMaterial = new MeshPhongMaterial({ vertexColors: VertexColors, depthWrite: false });
 	private surface: Mesh;
 	private geom: Geometry;
 	private checkResults: FaceResultEntry[] = [];
