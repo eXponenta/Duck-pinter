@@ -4,7 +4,7 @@ import { Object3D, Vector3 } from "three";
 const TMP_V = new Vector3(0, 1, 0);
 
 export class CameraMachine {
-	targetDistance: number = 1;
+	targetDistance: number = 3;
 	speed: number = 0.001;
 	tangent: number = Math.PI / 12;
 	target: Object3D;
