@@ -10,7 +10,9 @@ const loader = document.querySelector("#loader");
 	const app = new App(appEl, {
 		mode: params.get("mode"),
 		mobs: Number(params.get("mobs")) || 3,
-		spikes: params.get("spikes")
+		spikes: Number(params.get("spikes")),
+		fast: Number(params.get("fast")),
+		octs: Number(params.get("octs"))
 	});
 
 	app.init();

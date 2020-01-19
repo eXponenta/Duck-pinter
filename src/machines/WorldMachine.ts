@@ -59,8 +59,12 @@ export class WorldMachine {
 	private octree: FaceOctree;
 	private raycaster: Raycaster = new Raycaster();
 
+	private solverWorkTime = 0;
+
 	public rollersFlat: RollerEntity[] = [];
 	public renderSpikes: boolean = false;
+	public renderOcts: boolean = false;
+	public octreeSolv: boolean = false;
 
 	constructor(
 		private scene: Scene,
@@ -77,28 +81,28 @@ export class WorldMachine {
 				used: false
 			};
 		});
-
-		if (renderMode === RENDER_MODE.BLIT) {
-			this.rt = new RTBlitter(App.instance.renderer, 2048);
-		}
 	}
 
-	init(mesh: Mesh) {
+	async init(mesh: Mesh) {
 		this.surface = mesh;
+
+		const start = performance.now();
 
 		this.octree = FaceOctree.fromMesh(mesh);
 
-		const nodes = this.octree.genNodeLevel(4);
+		const end = performance.now();
 
-		this.scene.add(nodes);
+		console.log(this.octree, "Build time", end - start);
 
-		console.log(this.octree);
+		if (this.renderOcts && this.octreeSolv) {
+			const nodes = this.octree.genNodeLevel(4);
+			this.scene.add(nodes);
+		}
 
-		if (this.surface.geometry.isGeometry) {
-			this.geom = this.surface.geometry as Geometry;
-		} else {
-			this.geom = new Geometry();
-			this.geom.fromBufferGeometry(this.surface.geometry as BufferGeometry);
+		this.geom = this.octree.geom;
+
+		if (this.renderMode === RENDER_MODE.BLIT) {
+			this.rt = new RTBlitter(App.instance.renderer, 2048, 100);
 		}
 
 		if (this.renderMode === RENDER_MODE.BLIT) {
@@ -107,7 +111,17 @@ export class WorldMachine {
 			this.scene.add(...this.ropePool.map(e => e.rope));
 		}
 
+		setInterval(() => {
+			console.log("AVG Solver % (on 1 sec):", (0.1 * this.solverWorkTime).toFixed(2));
+			console.log("AVG Solver method:" + (this.octreeSolv ? "Octree" : "Naive"));
+
+			this.solverWorkTime = 0;
+		}, 1000);
+
 		this.reset();
+		return new Promise(res => {
+			setTimeout(res, 500);
+		});
 	}
 
 	registerRoller(roller: RollerEntity, color: number, initial?: Vector3) {
@@ -141,7 +155,11 @@ export class WorldMachine {
 			e.get<SurfCalcCmp>(SurfCalcCmp).faceRequest.skip = false;
 		});
 
-		this._calcClosestPoints();
+		if (!this.octreeSolv) {
+			this._calcClosestPoints();
+		} else {
+			this._calcClosestPointsFast(true);
+		}
 	}
 
 	update(delta: number) {
@@ -149,8 +167,15 @@ export class WorldMachine {
 			r.update(delta);
 		});
 
+		const start = performance.now();
 		// search closes points avery frame
-		this._calcClosestPoints();
+		if (!this.octreeSolv) {
+			this._calcClosestPoints();
+		} else {
+			this._calcClosestPointsFast(false);
+		}
+
+		this.solverWorkTime += performance.now() - start;
 
 		if (this.renderSpikes) {
 			this._calcClosestSegment();
@@ -175,12 +200,10 @@ export class WorldMachine {
 			return;
 		}
 
-		const r = [];
-
 		for (let i = 0; i < from.length; i++) {
 			const g = from[i];
 
-			if (!g.faceRequest.skip) {
+			if (!g.faceRequest || g.faceRequest.skip) {
 				continue;
 			}
 
@@ -189,9 +212,6 @@ export class WorldMachine {
 			g.onFaceRequestDone && g.onFaceRequestDone(res as any);
 
 			this._updateRopeData(this.rollersFlat[i], res as any);
-
-			// important!!
-			//g.faceRequest.reset();
 		}
 	}
 
@@ -247,7 +267,7 @@ export class WorldMachine {
 		}
 
 		if (this.renderMode === RENDER_MODE.BLIT) {
-			//this.rt.commit();
+			this.rt.commit();
 		}
 	}
 

@@ -23,6 +23,22 @@ const ROPE_POOL_SIZE = 30; // how many lines for MESH render mode
 const ROPE_POOL_LEN = 600; // how many segments per line for MESH render mode
 const MODE = RENDER_MODE.BLIT; // BLIT - pixel render, MESH - line render
 
+export interface IDemoOptions {
+	mobs: number;
+	mode: string;
+	spikes: boolean;
+	fast: boolean;
+	octs: boolean;
+}
+
+const DEF_OPTIONS: IDemoOptions = {
+	mobs: 3,
+	mode: "mesh",
+	spikes: true,
+	fast: true,
+	octs: true
+};
+
 export class App extends BaseApp {
 	lights = {
 		d: new DirectionalLight(0xffffff, 1),
@@ -41,10 +57,11 @@ export class App extends BaseApp {
 		return this.worldMachine.rollersFlat[0];
 	}
 
-	constructor(appEl: HTMLElement, options: { mobs: number; mode: string; spikes: boolean }) {
+	constructor(appEl: HTMLElement, options: IDemoOptions) {
 		super(appEl);
 
-		this.options = options;
+		this.options = options = Object.assign({}, DEF_OPTIONS, options || {});
+
 		this.renderer.sortObjects = false;
 
 		const { d, a } = this.lights;
@@ -61,25 +78,30 @@ export class App extends BaseApp {
 		//this.controlls.target = this.roller.position;
 
 		const mode = (options.mode || "mesh") === "mesh" ? RENDER_MODE.MESH : RENDER_MODE.BLIT;
+		const mobs = this.options.mobs || 3;
 
 		this.cameraMachine = new CameraMachine(this.camera);
-		this.worldMachine = new WorldMachine(this.scene, ROPE_POOL_SIZE, ROPE_POOL_LEN, mode);
+		this.worldMachine = new WorldMachine(this.scene, Math.max(ROPE_POOL_SIZE, mobs * 2), ROPE_POOL_LEN, mode);
 
-		this.worldMachine.renderSpikes = options.spikes !== undefined ? options.spikes : false;
+		this.worldMachine.renderSpikes = options.spikes;
+		this.worldMachine.octreeSolv = options.fast;
+		this.worldMachine.renderOcts = options.octs;
+
+		console.log("DEMO RUN OPTIONS", this.options);
 	}
 
 	init() {}
 
-	postInit() {
+	async postInit() {
 		super.postInit();
 
 		// bin surface to machine
-		this.worldMachine.init(this.model);
+		await this.worldMachine.init(this.model);
 
 		// player
 		this.worldMachine.registerRoller(this.createRoller(0xf4d203), 0xf4d203, new Vector3(0, 0, 4));
 
-		const count = Math.min(15, this.options.mobs || 3);
+		const count = Math.min(150, this.options.mobs || 3);
 
 		for (let i = 0; i < count; i++) {
 			const c = new Color(Math.random(), Math.random(), Math.random());
@@ -133,7 +155,7 @@ export class App extends BaseApp {
 
 		this.rollerViewPref = roller.scene;
 
-		this.postInit();
+		await this.postInit();
 	}
 
 	update(delta) {

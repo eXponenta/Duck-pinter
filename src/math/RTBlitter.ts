@@ -60,7 +60,7 @@ export class RTBlitter extends WebGLRenderTarget {
 	private activeBrush = 0;
 	private dirty = false;
 
-	constructor(private renderer: WebGLRenderer, size = 1024) {
+	constructor(private renderer: WebGLRenderer, size = 1024, pool = 10) {
 		super(size, size, {
 			minFilter: LinearFilter,
 			magFilter: NearestFilter,
@@ -69,7 +69,7 @@ export class RTBlitter extends WebGLRenderTarget {
 
 		const g = new PlaneBufferGeometry(1, 1);
 
-		this.brushPool = Array.from({ length: 10 }, () => {
+		this.brushPool = Array.from({ length: pool }, () => {
 			let m = new Mesh(
 				g,
 				new MeshBasicMaterial({
