@@ -69,11 +69,15 @@ export class WorldMachine {
 	constructor(
 		private scene: Scene,
 		private ropePoolSize = 10,
-		ropeSize = 300,
+		private ropeSize = 300,
 		private renderMode = RENDER_MODE.MESH
-	) {
-		this.ropePool = Array.from({ length: ropePoolSize }, () => {
-			const rope = new Rope(ropeSize, DEF_ROPE_WIDTH, 0xff0000, this.ropeMat);
+	) {}
+
+	capitalizeRopePool(length: number) {
+		const p = Array.from({ length}, () => {
+			const rope = new Rope(this.ropeSize, DEF_ROPE_WIDTH, 0xff0000, this.ropeMat);
+			
+			this.renderMode === RENDER_MODE.MESH && this.scene.add(rope);
 
 			rope.minDistance = 0.05;
 			return {
@@ -81,6 +85,8 @@ export class WorldMachine {
 				used: false
 			};
 		});
+
+		this.ropePool = this.ropePool.concat(p); 
 	}
 
 	async init(mesh: Mesh) {
@@ -107,18 +113,11 @@ export class WorldMachine {
 
 		if (this.renderMode === RENDER_MODE.BLIT) {
 			this.surface.material.map = this.rt.texture;
-		} else {
-			this.scene.add(...this.ropePool.map(e => e.rope));
 		}
 
-		setInterval(() => {
-			console.log("AVG Solver % (on 1 sec):", (0.1 * this.solverWorkTime).toFixed(2));
-			console.log("AVG Solver method:" + (this.octreeSolv ? "Octree" : "Naive"));
-
-			this.solverWorkTime = 0;
-		}, 1000);
-
+		this.capitalizeRopePool(this.ropePoolSize);
 		this.reset();
+		
 		return new Promise(res => {
 			setTimeout(res, 500);
 		});
@@ -342,7 +341,10 @@ export class WorldMachine {
 	_getFreeRope() {
 		const free = this.ropePool.filter(e => !e.used)[0];
 
-		if (!free) throw new Error("Rope pool empty!");
+		if (!free) {
+			this.capitalizeRopePool(this.ropePoolSize / 2);
+			return this._getFreeRope();
+		}
 
 		return free;
 	}
